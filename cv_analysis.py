@@ -8,6 +8,12 @@ from pyemma.thermo import tram
 import logging
 import yank
 
+import os, psutil
+
+def usage():
+	process = psutil.Process(os.getpid())
+	return process.memory_info()[0]/ (1024.0 ** 3)
+
 logger = logging.getLogger(__name__)
 logging.root.setLevel(logging.DEBUG)
 logging.basicConfig(level=logging.DEBUG)
@@ -34,9 +40,8 @@ for file in os.listdir('.'):
 				files[elements[0]] = state_string
 				if state_string not in states:
 					states.append(state_string)
-
-logger.debug('done with reading info of biased states')
-
+logger.debug('memory after reading info of biased states')
+logger.debug(usage())
 with open('unbiased.txt') as fp:
 	for line in fp.read().split("\n")[:-1]:
 		elements = line.split()
@@ -45,8 +50,9 @@ with open('unbiased.txt') as fp:
 		if state_string not in states:
 			states.append(state_string)
 
-logger.debug('done with reading info of the unbiased state')
 
+logger.debug('memory after reading info of the unbiased state')
+logger.debug(usage())
 index_of_state = {}
 for index, data in enumerate(states):
 	index_of_state[data] = index
@@ -65,7 +71,6 @@ ttraj = []
 
 for file_name, data in files.items():
 	df = pd.read_csv(file_name, sep = '\s+' , names = ['r_p', 'r_o'])
-	dataframes.append(df)
 	rpmin = min(rpmin, df['r_p'].min())
 	rpmax = max(rpmax, df['r_p'].max())
 	ttraj.append([index_of_state[data]]*len(df.index))
@@ -74,9 +79,8 @@ for file_name, data in files.items():
 	del df
 
 
-del dataframes
-
-logger.debug('done with ttraj')
+logger.debug('memory after ttraj')
+logger.debug(usage())
 ncenters = np.max(np.asarray(state_values), axis=0)[2] + 1
 nstates = len(state_values)
 for i, state in enumerate(state_values):
@@ -87,7 +91,7 @@ for i, state in enumerate(state_values):
 	else:
 		state_values[i][2] = 0
 
-logger.debug('substitution of index by r0')
+
 dtraj = []
 bias = []
 factor = p_bins/(rpmax - rpmin)
@@ -102,9 +106,11 @@ for file_name, data in files.items():
 		local_bias[:,i] = (state[0]/2.0)*(df['r_p'].values-state[2])**2 + (state[1]/2.0)*(df['r_o'].values**2)
 	del df
 	bias.append(local_bias.tolist())
+	logger.debug('memory after appending bias')
+	logger.debug(usage())
 	del local_bias
 
-logger.debug('done with dtraj and bias')
+
 #tram_obj = tram(ttraj, dtraj, bias, unbiased_state)
 #f = open('free_energies.txt','w')
 #f.write(tram_obj.free_energies)
