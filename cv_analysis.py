@@ -4,7 +4,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import pyemma
+from pyemma.thermo import tram
+import logging
+import yank
 
+logger = logging.getLogger(__name__)
+logging.root.setLevel(logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)
+yank.utils.config_root_logger(verbose=True, log_file_path=None)
 # Constants
 T = 310
 kT = 1.987E-3*T
@@ -28,6 +35,8 @@ for file in os.listdir('.'):
 				if state_string not in states:
 					states.append(state_string)
 
+logger.debug('done with reading info of biased states')
+
 with open('unbiased.txt') as fp:
 	for line in fp.read().split("\n")[:-1]:
 		elements = line.split()
@@ -36,11 +45,16 @@ with open('unbiased.txt') as fp:
 		if state_string not in states:
 			states.append(state_string)
 
+logger.debug('done with reading info of the unbiased state')
+
 index_of_state = {}
 for index, data in enumerate(states):
 	index_of_state[data] = index
 
 unbiased = len(states) - 1
+
+del states
+
 p_bins = 2000
 
 dataframes = list()
@@ -57,8 +71,12 @@ for file_name, data in files.items():
 	ttraj.append([index_of_state[data]]*len(df.index))
 	if [int(value) for value in data.split()] not in state_values:
 		state_values.append([int(value) for value in data.split()])
+	del df
 
 
+del dataframes
+
+logger.debug('done with ttraj')
 ncenters = np.max(np.asarray(state_values), axis=0)[2] + 1
 nstates = len(state_values)
 for i, state in enumerate(state_values):
@@ -69,25 +87,29 @@ for i, state in enumerate(state_values):
 	else:
 		state_values[i][2] = 0
 
+logger.debug('substitution of index by r0')
 dtraj = []
 bias = []
 factor = p_bins/(rpmax - rpmin)
-for k, df in enumerate(dataframes):
-	print("{}/{}".format(k+1, len(dataframes)))
+
+for file_name, data in files.items():
+	df = pd.read_csv(file_name, sep = '\s+' , names = ['r_p', 'r_o'])
+	logger.debug(file_name)
 	dtraj.append(np.floor(factor*(df['r_p'] - rpmin)).astype(int).tolist())
 	nconfs = len(df.index)
 	local_bias = np.ndarray(shape=(nconfs, nstates))
 	for i, state in enumerate(state_values):
 		local_bias[:,i] = (state[0]/2.0)*(df['r_p'].values-state[2])**2 + (state[1]/2.0)*(df['r_o'].values**2)
+	del df
 	bias.append(local_bias.tolist())
+	del local_bias
 
-	# if k==10:
-	# 	break
+logger.debug('done with dtraj and bias')
+#tram_obj = tram(ttraj, dtraj, bias, unbiased_state)
+#f = open('free_energies.txt','w')
+#f.write(tram_obj.free_energies)
 
-tram_obj = tram(ttraj, dtraj, bias, unbiased_state)
-f = open('free_energies.txt','w')
-f.write(tram_obj.free_energies)
-#tram_obj.free_energies
+
 # for i, b in enumerate(bias):
 # 	print("\n\nlist {}".format(i))
 # 	for j, c in enumerate(b):
