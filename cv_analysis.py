@@ -29,35 +29,33 @@ dr = axis_distance*(expansion_factor - 1.0)/2.0
 rmax = axis_distance + dr
 rmin = -dr
 
-files = dict()
-states = list()
+dataframes = list()
+
+
+df = pd.read_csv('unbiased.txt', sep='\s+', names=['file', 'K_parallel', 'K_orthogonal'], dtype=str, comment="#")
+df['index'] = '-1'
+dataframes.append(df)
+del df
 for file in os.listdir('.'):
 	if re.match(r'conf_[0-9]+\.txt', file):
-		with open(file) as fp:
-			for line in fp.read().split("\n")[:-1]:
-				elements = line.split()
-				state_string = " ".join([elements[1], elements[2], elements[3]])
-				files[elements[0]] = state_string
-				if state_string not in states:
-					states.append(state_string)
-logger.debug('memory after reading info of biased states')
+		df = pd.read_csv(file, sep='\s+', names=['file', 'K_parallel', 'K_orthogonal', 'index'], dtype=str, comment="#")
+		dataframes.append(df)
+		del df
+
+df = pd.concat(dataframes)
+del dataframes
+df['state_string'] = df.iloc[:,1:4].apply(lambda x: ' '.join(x), axis=1)
+
+files = pd.Series(df.state_string.values, index=df.file).to_dict()
+states = df.state_string.unique()
+
+index_of_state = pd.Series(np.arange(states.shape[0]), index=states).to_dict()
+unbiased_state = index_of_state['0 0 -1']
+
+del df
+
+logger.debug('memory after reading info of states')
 logger.debug(usage())
-with open('unbiased.txt') as fp:
-	for line in fp.read().split("\n")[:-1]:
-		elements = line.split()
-		state_string = " ".join([elements[1], elements[2], '-1'])
-		files[elements[0]] = state_string
-		if state_string not in states:
-			states.append(state_string)
-
-
-logger.debug('memory after reading info of the unbiased state')
-logger.debug(usage())
-index_of_state = {}
-for index, data in enumerate(states):
-	index_of_state[data] = index
-
-unbiased = len(states) - 1
 
 del states
 
@@ -81,6 +79,7 @@ for file_name, data in files.items():
 
 logger.debug('memory after ttraj')
 logger.debug(usage())
+
 ncenters = np.max(np.asarray(state_values), axis=0)[2] + 1
 nstates = len(state_values)
 for i, state in enumerate(state_values):
@@ -98,14 +97,17 @@ factor = p_bins/(rpmax - rpmin)
 
 for file_name, data in files.items():
 	df = pd.read_csv(file_name, sep = '\s+' , names = ['r_p', 'r_o'])
+	nframes = len(df.index)
+	df_cut = df.iloc[list(np.arange(0, nframes, 4))]
+	del df
 	logger.debug(file_name)
-	dtraj.append(np.floor(factor*(df['r_p'] - rpmin)).astype(int).tolist())
-	nconfs = len(df.index)
+	dtraj.append(np.floor(factor*(df_cut['r_p'] - rpmin)).astype(int).tolist())
+	nconfs = len(df_cut.index)
 	local_bias = np.ndarray(shape=(nconfs, nstates))
 	for i, state in enumerate(state_values):
-		local_bias[:,i] = (state[0]/2.0)*(df['r_p'].values-state[2])**2 + (state[1]/2.0)*(df['r_o'].values**2)
-	del df
-	bias.append(local_bias.tolist())
+		local_bias[:,i] = (state[0]/2.0)*(df_cut['r_p'].values-state[2])**2 + (state[1]/2.0)*(df_cut['r_o'].values**2)
+	del df_cut
+	bias.append(local_bias)
 	logger.debug('memory after appending bias')
 	logger.debug(usage())
 	del local_bias
